@@ -21,10 +21,14 @@ int main()
     std::cout << slave_name << '\n';
 
     namespace bp = boost::process;
-    bp::child c("bash", (bp::std_out & bp::std_err) > slave_name, bp::std_in < slave_name);
+    bp::child c("bash -i -s", (bp::std_out & bp::std_err) > slave_name, bp::std_in < slave_name);
 
-    sleep(1);
+    sleep(2);
     char buf[2048];
+    read(fdm, buf, 2048);
+    std::cout << buf;
+    write(fdm, "ls -la\n", 7);
+    sleep(2);
     read(fdm, buf, 2048);
     std::cout << buf;
     close(fdm);
