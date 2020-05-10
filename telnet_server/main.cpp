@@ -56,7 +56,7 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
 
 std::mutex logger::m_;
 
-int main(int argc, char* argv[2])
+int main(int argc, char* argv[3])
 {
     try {
         if(argc!=3)
