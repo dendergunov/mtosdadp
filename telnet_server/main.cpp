@@ -1,4 +1,5 @@
 #include "filter_utils.hpp"
+#include "pseudo_terminal.hpp"
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -108,20 +109,21 @@ int main(int argc, char* argv[3])
                                 return;
                             logger{} << "SIGPIPE";
                         });
-                        boost::process::async_pipe in{ctx};
-                        std::shared_ptr<boost::process::async_pipe> out_p = std::make_shared<boost::process::async_pipe>(ctx);
-                        boost::process::child c(ctx, "bash",
-                                                boost::process::std_in < in,
-                                                (boost::process::std_out & boost::process::std_err) > *out_p);
+
+                        std::shared_ptr<pty> pterminal_p = std::make_shared<pty>(ctx);
+
+                        boost::process::child c(ctx, "bash -i -s -l",
+                                                boost::process::std_in < pterminal_p->pslave_name(),
+                                                (boost::process::std_out & boost::process::std_err) > pterminal_p->pslave_name());
 
                         std::mutex output_m_;
 
-                        boost::asio::spawn(ctx, [socket_p, out_p, limit, &output_m_](boost::asio::yield_context yc) {
+                        boost::asio::spawn(ctx, [socket_p, pterminal_p, limit, &output_m_](boost::asio::yield_context yc) {
                             boost::system::error_code ec;
                             std::string out_buf;
                             out_buf.resize(limit*2);
                             for(;;){
-                                std::size_t str_size = out_p->async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
+                                std::size_t str_size = pterminal_p->master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
                                 if(ec){
                                     logger{} << "out async_read: " << ec.message();
                                     return;
@@ -224,10 +226,10 @@ int main(int argc, char* argv[3])
                             }
                             filter_commands();
                             filter_r(in_buf, str_size);
-                            boost::asio::async_write(in, boost::asio::buffer(in_buf, str_size), yc[ec]);
+                            boost::asio::async_write(pterminal_p->master, boost::asio::buffer(in_buf, str_size), yc[ec]);
                             if(ec){
                                 logger{} << "in async_write: " << ec.message();
-                                in.close();
+                                pterminal_p->master.close();
                                 break;
                             }
                         }
