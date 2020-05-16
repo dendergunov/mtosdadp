@@ -17,6 +17,8 @@
 #include <vector>
 #include <optional>
 #include <charconv>
+#include <atomic>
+#include <list>
 
 template<typename... Ts>
 std::string format(Ts&&... args)
@@ -43,6 +45,45 @@ private:
     static std::mutex m_;
     std::lock_guard<std::mutex> l_{m_};
 };
+
+class write_query
+{
+public:
+    write_query() : on_writing_(false), l_{} {};
+    void write(std::shared_ptr<boost::asio::ip::tcp::socket> socket_p, std::string s,
+               boost::asio::yield_context & yc, boost::system::error_code & ec)
+    {
+        {
+            std::lock_guard lg(list_access_);
+            l_.push_back(std::move(s));
+        }
+        bool exchanged, expected(false);
+        exchanged = on_writing_.compare_exchange_weak(expected, true);
+        if(exchanged){
+            while(true){
+                {
+                    std::lock_guard lg(list_access_);
+                    if(l_.empty()){
+                        on_writing_.store(false);
+                        break;
+                    }
+                    s = std::move(l_.front());
+                    l_.pop_front();
+                }
+                boost::asio::async_write(*socket_p, boost::asio::buffer(s, s.size()), yc[ec]);
+                if(ec){
+                    logger{} << "Write query: " << ec.message();
+                }
+            }
+        }
+    }
+private:
+    std::atomic_bool on_writing_;
+    std::mutex list_access_;
+    std::list<std::string> l_;
+};
+
+
 
 template<typename T>
 std::optional<T> from_chars(std::string_view sv_) noexcept
@@ -103,36 +144,35 @@ int main(int argc, char* argv[3])
                         std::shared_ptr<boost::asio::ip::tcp::socket> socket_p =
                                 std::make_shared<boost::asio::ip::tcp::socket>(std::move(socket));
 
-                        boost::asio::signal_set sig_child_signal(ctx, SIGPIPE);
+                        std::shared_ptr<write_query> wq_p = std::make_shared<write_query>();
+
+                        boost::asio::signal_set sig_child_signal(ctx, SIGCHLD);
                         sig_child_signal.async_wait([&](boost::system::error_code ec, int /*signal*/){
                             if(ec)
                                 return;
-                            logger{} << "SIGPIPE";
-                        });
+                            logger{} << "SIGCHLD";
+                        });  
 
                         std::shared_ptr<pty> pterminal_p = std::make_shared<pty>(ctx);
-
+                        std::mutex output_m_;
                         boost::process::child c(ctx, "bash -i -s -l",
                                                 boost::process::std_in < pterminal_p->pslave_name(),
                                                 (boost::process::std_out & boost::process::std_err) > pterminal_p->pslave_name());
 
-                        std::mutex output_m_;
-
-                        boost::asio::spawn(ctx, [socket_p, pterminal_p, limit, &output_m_](boost::asio::yield_context yc) {
+                        boost::asio::spawn(ctx, [socket_p, wq_p, pterminal_p, limit](boost::asio::yield_context yc) {
                             boost::system::error_code ec;
                             std::string out_buf;
                             out_buf.resize(limit*2);
                             for(;;){
                                 std::size_t str_size = pterminal_p->master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
                                 if(ec){
-                                    logger{} << "out async_read: " << ec.message();
+                                    logger{} << "master terminal async_read: " << ec.message();
                                     return;
                                 }
                                 add_r(out_buf, str_size);
-                                {
-                                    std::lock_guard<std::mutex> l_{output_m_};
-                                    boost::asio::async_write(*socket_p, boost::asio::buffer(out_buf, str_size), yc[ec]);
-                                }
+                                wq_p->write(socket_p, out_buf, yc, ec);
+                                out_buf.clear();
+                                out_buf.resize(limit*2);
                                 if(ec){
                                     logger{} << "socket async_send: " << ec.message();
                                     return;
@@ -173,22 +213,16 @@ int main(int argc, char* argv[3])
                                     char o[3] = {code_bytes::IAC, 0, opt};
                                     switch(opt){
                                     case code_bytes::DO:
-                                    {   std::lock_guard<std::mutex> l_{output_m_};
                                         o[1] = code_bytes::WONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o, 3), yc[ec]);
-                                    }
+                                        wq_p->write(socket_p, std::string(o), yc, ec);
                                         break;
                                     case code_bytes::WILL:
-                                    {   std::lock_guard<std::mutex> l_{output_m_};
                                         o[1] = code_bytes::DONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o, 3), yc[ec]);
-                                    }
+                                        wq_p->write(socket_p, std::string(o), yc, ec);
                                         break;
                                     case code_bytes::WONT:
-                                    {   std::lock_guard<std::mutex> l_{output_m_};
                                         o[1] = code_bytes::DONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o, 3), yc[ec]);
-                                    }
+                                        wq_p->write(socket_p, std::string(o), yc, ec);
                                         break;
                                     default: //DONT
                                         break;
@@ -201,12 +235,7 @@ int main(int argc, char* argv[3])
                                         kill(c.id(), SIGINT);
                                         break;
                                     case code_bytes::AYT:
-                                    {
-                                        std::string i_am_there("Server is online...\n");
-                                        std::lock_guard<std::mutex> l_{output_m_};
-                                        boost::asio::async_write(*socket_p,
-                                                                 boost::asio::buffer(i_am_there, i_am_there.size()), yc[ec]);
-                                    }
+                                        wq_p->write(socket_p, "Server is online...\n", yc, ec);
                                         break;
                                     default:
                                         break;
@@ -228,7 +257,7 @@ int main(int argc, char* argv[3])
                             filter_r(in_buf, str_size);
                             boost::asio::async_write(pterminal_p->master, boost::asio::buffer(in_buf, str_size), yc[ec]);
                             if(ec){
-                                logger{} << "in async_write: " << ec.message();
+                                logger{} << "master terminal async_write: " << ec.message();
                                 pterminal_p->master.close();
                                 break;
                             }
