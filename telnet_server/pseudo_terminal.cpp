@@ -4,8 +4,10 @@
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
+#include <boost/asio/io_context.hpp>
 
-pty::pty()
+pty::pty(boost::asio::io_context& ctx)
+    :   master(ctx)
 {
     int ec;
     pmaster_id_ = posix_openpt(O_RDWR);
@@ -22,10 +24,12 @@ pty::pty()
     }  catch (const std::exception& e) {
         std::cerr << "Error in ptsname " << e.what() << '\n';
     }
+    master.assign(pmaster_id_);
 }
 
 pty::pty(pty&& other)
-    : pmaster_id_(std::exchange(other.pmaster_id_, -1)),
+    :   master(std::move(other.master)),
+    pmaster_id_(std::exchange(other.pmaster_id_, -1)),
     pslave_name_(std::move(other.pslave_name_))
 {}
 
@@ -33,10 +37,11 @@ pty& pty::operator=(pty &&other)
 {
     pmaster_id_ = std::exchange(other.pmaster_id_, -1);
     pslave_name_ = std::move(other.pslave_name_);
+    master = std::move(other.master);
     return *this;
 }
 
 pty::~pty()
 {
-    close(pmaster_id_);
+    //as posix::stream_descriptor owns the native descriptor, it has to close master pty in its destructor call
 }
