@@ -19,6 +19,7 @@
 #include <charconv>
 #include <atomic>
 #include <list>
+#include <thread>
 
 template<typename... Ts>
 std::string format(Ts&&... args)
@@ -98,11 +99,11 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
 
 std::mutex logger::m_;
 
-int main(int argc, char* argv[3])
+int main(int argc, char* argv[4])
 {
     try {
-        if(argc!=3)
-            throw std::runtime_error(format("Usage: ", argv[0], " <listen-port> ", "<buffer-size>"));
+        if(argc < 3 || argc > 4)
+            throw std::runtime_error(format("Usage: ", argv[0], " <listen-port> ", "<buffer-size> ", "<thread-number>"));
         boost::asio::io_context ctx;
         boost::asio::signal_set stop_signals{ctx, SIGINT, SIGTERM};
         stop_signals.async_wait([&](boost::system::error_code ec, int /*signal*/){
@@ -119,6 +120,14 @@ int main(int argc, char* argv[3])
         auto limit = from_chars<std::size_t>(argv[2]);
         if(!port || !*port)
             throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]"));
+
+        std::optional<std::uint32_t> threads;
+        if(argc==4){
+            threads = from_chars<std::uint32_t>(argv[3]);
+            if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
+            throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency()));
+        } else
+            threads = std::thread::hardware_concurrency();
 
         boost::asio::spawn(ctx, [&ctx, port=*port, limit=*limit](boost::asio::yield_context yc){
             boost::asio::ip::tcp::acceptor acceptor{ctx};
@@ -154,7 +163,6 @@ int main(int argc, char* argv[3])
                         });  
 
                         std::shared_ptr<pty> pterminal_p = std::make_shared<pty>(ctx);
-                        std::mutex output_m_;
                         boost::process::child c(ctx, "bash -i -s -l",
                                                 boost::process::std_in < pterminal_p->pslave_name(),
                                                 (boost::process::std_out & boost::process::std_err) > pterminal_p->pslave_name());
@@ -268,6 +276,16 @@ int main(int argc, char* argv[3])
                 }
             }
         });
+
+        std::vector<std::thread> workers;
+        workers.reserve(*threads-1);
+
+        for(unsigned i=1; i<*threads; ++i){
+            workers.emplace_back([&]{
+                ctx.run();
+            });
+        }
+
         ctx.run();
     } catch (...) {
         logger{} << boost::current_exception_diagnostic_information();
