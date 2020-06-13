@@ -10,12 +10,13 @@ template<std::size_t width>
 class sisd_lfsr
 {
 public:
-    sisd_lfsr()
+    sisd_lfsr(std::uint64_t polynom_head)
         : bit_width_(width*64),
+        width_(width),
         polynom_{0},
         state_{0}
     {
-        polynom_[width-1] = maximum_cycle_polynom_head[width-1];
+        polynom_[width-1] = polynom_head;
         for(auto& x: state_)
             x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
         std::cout << "Initialized sisd_lfsr!\n";
@@ -27,8 +28,37 @@ public:
             std::cout << std::bitset<64>(*i);
         std::cout << std::endl;
     };
+
+    void print_state()
+    {
+        std::cout << "\nState:\n";
+        for (auto i = state_.rbegin(); i != state_.rend(); ++i)
+            std::cout << std::bitset<64>(*i);
+        std::cout << std::endl;
+    }
+
+    bool clock()
+    {
+        bool carrier_bit = 0;
+        bool to_flip = state_[0] & 0x1ull;
+        bool least_bit;
+        for(int i = width_-1; i >= 0; --i){
+            least_bit = state_[i]&0x1ull;
+            if(to_flip)
+                state_[i] ^= polynom_[i];
+            state_[i] = state_[i] >> 1;
+            if(carrier_bit)
+                state_[i] = state_[i] | (1ull << 63);
+            carrier_bit = least_bit;
+        }
+        if(to_flip)
+            state_[width_-1] = state_[width_-1] | (1ull << 63);
+
+        return to_flip;
+    }
 private:
     std::size_t bit_width_;
+    std::size_t width_;
     std::array<std::uint64_t, width> polynom_;
     std::array<std::uint64_t, width> state_;
 };

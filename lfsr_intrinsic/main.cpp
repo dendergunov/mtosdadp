@@ -9,7 +9,10 @@
 
 int main()
 {
-    sisd_lfsr<3> lfsr;
+    sisd_lfsr<1> lfsr(maximum_cycle_polynom_head[3-1]);
+
+    lfsr.clock();
+    lfsr.print_state();
 
     return 0;
 }
