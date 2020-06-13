@@ -1,15 +1,37 @@
 #ifndef SISD_LFSR_HPP
 #define SISD_LFSR_HPP
 
-#include <map>
-#include <vector>
+#include "parameters.hpp"
 #include <array>
+#include <iostream>
+#include <bitset>
 
-const std::array<std::uint64_t, 4> maximum_cycle_polynom_head =
-    {0xD800000000000000, //64-bit: 64, 63, 61, 60
-     0xE100000000000000, //128-bit:128, 127, 126, 121
-     0xA003000000000000, //192-bit:192, 190, 178, 177
-     0xA420000000000000, //256-bit:256, 254, 251, 246
+template<std::size_t width>
+class sisd_lfsr
+{
+public:
+    sisd_lfsr()
+        : bit_width_(width*64),
+        polynom_{0},
+        state_{0}
+    {
+        polynom_[width-1] = maximum_cycle_polynom_head[width-1];
+        for(auto& x: state_)
+            x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
+        std::cout << "Initialized sisd_lfsr!\n";
+        std::cout << "Polynom:\n";
+        for (auto i = polynom_.rbegin(); i != polynom_.rend(); ++i)
+            std::cout << std::bitset<64>(*i);
+        std::cout << "\nState:\n";
+        for (auto i = state_.rbegin(); i != state_.rend(); ++i)
+            std::cout << std::bitset<64>(*i);
+        std::cout << std::endl;
     };
+private:
+    std::size_t bit_width_;
+    std::array<std::uint64_t, width> polynom_;
+    std::array<std::uint64_t, width> state_;
+};
+
 
 #endif // SISD_LFSR_HPP
