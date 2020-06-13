@@ -19,14 +19,14 @@ public:
         polynom_[width-1] = polynom_head;
         for(auto& x: state_)
             x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
-        std::cout << "Initialized sisd_lfsr!\n";
-        std::cout << "Polynom:\n";
-        for (auto i = polynom_.rbegin(); i != polynom_.rend(); ++i)
-            std::cout << std::bitset<64>(*i);
-        std::cout << "\nState:\n";
-        for (auto i = state_.rbegin(); i != state_.rend(); ++i)
-            std::cout << std::bitset<64>(*i);
-        std::cout << std::endl;
+//        std::cout << "Initialized sisd_lfsr!\n";
+//        std::cout << "Polynom:\n";
+//        for (auto i = polynom_.rbegin(); i != polynom_.rend(); ++i)
+//            std::cout << std::bitset<64>(*i);
+//        std::cout << "\nState:\n";
+//        for (auto i = state_.rbegin(); i != state_.rend(); ++i)
+//            std::cout << std::bitset<64>(*i);
+//        std::cout << std::endl;
     };
 
     void print_state()
@@ -75,12 +75,12 @@ public:
             polynom_.set(x);
         for(int i = 0; i < bit_width_; ++i)
             state_.set(i, uniform_random(0, 1));
-        std::cout << "Initialized sisd_lfsr!\n";
-        std::cout << "Polynom:\n";
-        std::cout << polynom_;
-        std::cout << "\nState:\n";
-        std::cout << state_;
-        std::cout << std::endl;
+//        std::cout << "Initialized bitset_lfsr!\n";
+//        std::cout << "Polynom:\n";
+//        std::cout << polynom_;
+//        std::cout << "\nState:\n";
+//        std::cout << state_;
+//        std::cout << std::endl;
     }
 
     void print_state(){
