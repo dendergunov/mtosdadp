@@ -2,6 +2,7 @@
 #include <benchmark/benchmark.h>
 
 #include <iostream>
+#include <map>
 
 static void BM_SomeFunction(benchmark::State& state)
 {
@@ -15,6 +16,8 @@ BENCHMARK(BM_SomeFunction);
 
 int main()
 {
+
+
     //Выбор размера регистра?
 
     //Выбор характеристического многочлена?
