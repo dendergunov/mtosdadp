@@ -63,5 +63,46 @@ private:
     std::array<std::uint64_t, width> state_;
 };
 
+template<std::size_t bit_width>
+class bitset_lfsr
+{
+public:
+    bitset_lfsr(std::array<std::size_t, 4> tap_indicies)
+        : bit_width_(bit_width),
+        width_(bit_width / 64)
+    {
+        for(auto x: tap_indicies)
+            polynom_.set(x);
+        for(int i = 0; i < bit_width_; ++i)
+            state_.set(i, uniform_random(0, 1));
+        std::cout << "Initialized sisd_lfsr!\n";
+        std::cout << "Polynom:\n";
+        std::cout << polynom_;
+        std::cout << "\nState:\n";
+        std::cout << state_;
+        std::cout << std::endl;
+    }
+
+    void print_state(){
+        std::cout << "State:\n";
+        std::cout << state_ << std::endl;
+    }
+
+    bool clock(){
+        bool to_tap = state_[0];
+        if(to_tap)
+            state_ = state_ ^ polynom_;
+        state_ = state_ >> 1;
+        state_[bit_width_-1] = to_tap;
+        return to_tap;
+    }
+
+private:
+    std::size_t bit_width_;
+    std::size_t width_;
+    std::bitset<bit_width> polynom_;
+    std::bitset<bit_width> state_;
+};
+
 
 #endif // SISD_LFSR_HPP

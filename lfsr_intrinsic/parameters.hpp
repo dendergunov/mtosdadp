@@ -10,13 +10,19 @@ std::uint64_t uniform_random(std::uint64_t min, std::uint64_t max)
     return std::uniform_int_distribution<std::uint64_t>(min, max)(prng);
 }
 
-const std::array<std::uint64_t, 4> maximum_cycle_polynom_head =
+constexpr std::array<std::uint64_t, 4> maximum_cycle_polynom_head =
     {0xD800000000000000, //64-bit: 64, 63, 61, 60
         0xE100000000000000, //128-bit:128, 127, 126, 121
         0xA003000000000000, //192-bit:192, 190, 178, 177
         0xA420000000000000, //256-bit:256, 254, 251, 246
 };
 
+constexpr std::array<std::array<std::size_t, 4>, 4> maximum_cycle_tap_indicies
+{{ {63, 62, 60, 59},
+        {127, 126, 125, 120},
+        {191, 189, 177, 176},
+        {255, 253, 250, 245},
+      }};
 
 
 #endif // PARAMETERS_HPP
