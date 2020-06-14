@@ -20,6 +20,7 @@ constexpr std::array<std::uint64_t, 8> maximum_cycle_polynom_head =
      0x8A10000000000000,
      0xA480000000000000
 };
+
 constexpr std::array<std::array<std::size_t, 4>, 8> maximum_cycle_tap_indicies
 {{ {63, 62, 60, 59},
     {127, 126, 125, 120},
@@ -29,7 +30,7 @@ constexpr std::array<std::array<std::size_t, 4>, 8> maximum_cycle_tap_indicies
     {383, 377, 368, 367},
     {447, 443, 441, 436},
     {511, 509, 506, 503}
-      }};
+}};
 
 
 #endif // PARAMETERS_HPP
