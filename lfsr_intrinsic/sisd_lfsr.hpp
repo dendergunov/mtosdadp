@@ -6,17 +6,19 @@
 #include <iostream>
 #include <bitset>
 
-template<std::size_t width>
+template<std::size_t bit_width>
 class sisd_lfsr
 {
 public:
     sisd_lfsr(std::uint64_t polynom_head)
-        : bit_width_(width*64),
-        width_(width),
+        : bit_width_(bit_width),
+        width_(bit_width/64),
         polynom_{0},
         state_{0}
     {
-        polynom_[width-1] = polynom_head;
+        static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
+
+        polynom_[width_-1] = polynom_head;
         for(auto& x: state_)
             x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
 //        std::cout << "Initialized sisd_lfsr!\n";
@@ -59,8 +61,8 @@ public:
 private:
     std::size_t bit_width_;
     std::size_t width_;
-    std::array<std::uint64_t, width> polynom_;
-    std::array<std::uint64_t, width> state_;
+    std::array<std::uint64_t, bit_width/64> polynom_;
+    std::array<std::uint64_t, bit_width/64> state_;
 };
 
 template<std::size_t bit_width>
@@ -71,6 +73,7 @@ public:
         : bit_width_(bit_width),
         width_(bit_width / 64)
     {
+        static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
         for(auto x: tap_indicies)
             polynom_.set(x);
         for(int i = 0; i < bit_width_; ++i)
