@@ -21,14 +21,6 @@ public:
         polynom_[width_-1] = polynom_head;
         for(auto& x: state_)
             x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
-//        std::cout << "Initialized sisd_lfsr!\n";
-//        std::cout << "Polynom:\n";
-//        for (auto i = polynom_.rbegin(); i != polynom_.rend(); ++i)
-//            std::cout << std::bitset<64>(*i);
-//        std::cout << "\nState:\n";
-//        for (auto i = state_.rbegin(); i != state_.rend(); ++i)
-//            std::cout << std::bitset<64>(*i);
-//        std::cout << std::endl;
     };
 
     void print_state()
@@ -48,9 +40,9 @@ public:
             least_bit = state_[i]&0x1ull;
             if(to_flip)
                 state_[i] ^= polynom_[i];
-            state_[i] = state_[i] >> 1;
+            state_[i] >>= 1;
             if(carrier_bit)
-                state_[i] = state_[i] | (1ull << 63);
+                state_[i] |= (1ull << 63);
             carrier_bit = least_bit;
         }
         if(to_flip)
@@ -78,12 +70,6 @@ public:
             polynom_.set(x);
         for(int i = 0; i < bit_width_; ++i)
             state_.set(i, uniform_random(0, 1));
-//        std::cout << "Initialized bitset_lfsr!\n";
-//        std::cout << "Polynom:\n";
-//        std::cout << polynom_;
-//        std::cout << "\nState:\n";
-//        std::cout << state_;
-//        std::cout << std::endl;
     }
 
     void print_state(){
@@ -94,7 +80,7 @@ public:
     bool clock(){
         bool to_tap = state_[0];
         if(to_tap)
-            state_ = state_ ^ polynom_;
+            state_ ^= polynom_;
         state_ = state_ >> 1;
         state_[bit_width_-1] = to_tap;
         return to_tap;
