@@ -4,6 +4,7 @@
 #include "parameters.hpp"
 #include <immintrin.h>
 #include <array>
+#include <vector>
 #include <iostream>
 #include <bitset>
 
@@ -20,6 +21,23 @@ public:
         for(auto& x: state_){
             x = _mm_set_epi64x(uniform_random(0, std::numeric_limits<std::uint64_t>::max()),
                               uniform_random(0, std::numeric_limits<std::uint64_t>::max()));
+        }
+        for(int i = 0; i < width_; ++i){
+            polynom_[i] = _mm_set_epi64x(poly[2*i+1], poly[2*i]);
+        }
+    }
+
+    simd_lfsr_128(const std::vector<std::uint64_t>& poly)
+        : bit_width_(bit_width),
+        width_(bit_width_/128)
+    {
+        static_assert(bit_width>0 && !(bit_width%128), "Number of bits has to be a multiple of 128!");
+        if(poly.size()<width_*2)
+            throw std::runtime_error("Vector with coefficients is too small!");
+
+        for(auto& x: state_){
+            x = _mm_set_epi64x(uniform_random(0, std::numeric_limits<std::uint64_t>::max()),
+                               uniform_random(0, std::numeric_limits<std::uint64_t>::max()));
         }
         for(int i = 0; i < width_; ++i){
             polynom_[i] = _mm_set_epi64x(poly[2*i+1], poly[2*i]);

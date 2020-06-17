@@ -40,7 +40,8 @@ public:
         width_(bit_width/64)
     {
         static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
-        static_assert(poly.size()>= width_, "Vector with coefficients is too narrow!");
+        if(poly.size()>=width_*2)
+            throw std::runtime_error("Vector with coefficients is too small!");
 
         for(int i = width_-1; i>=0; --i)
             polynom_[i]=poly[i];
