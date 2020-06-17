@@ -7,7 +7,7 @@
 #include <iostream>
 #include <bitset>
 
-#if defined (__AVX__)
+#if defined (__SSE4_1__)
 template <std::size_t bit_width>
 class simd_lfsr_128
 {

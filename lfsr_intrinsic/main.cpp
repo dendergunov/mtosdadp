@@ -17,9 +17,9 @@ static void BM_SISD(benchmark::State& state)
     }
 }
 
-#if defined (__AVX__)
+#if defined (__SSE4_1__)
 template<std::size_t bit_width>
-static void BM_AVX(benchmark::State& state)
+static void BM_SSE(benchmark::State& state)
 {
     simd_lfsr_128<bit_width> lfsr(maximum_cycle_polynom_head.at(bit_width/64-1));
     for(auto _ : state){
@@ -49,14 +49,14 @@ static void BM_BITSET(benchmark::State& state)
 }
 
 BENCHMARK_TEMPLATE(BM_SISD, 128);
-BENCHMARK_TEMPLATE(BM_AVX, 128);
+BENCHMARK_TEMPLATE(BM_SSE, 128);
 BENCHMARK_TEMPLATE(BM_SISD, 256);
-BENCHMARK_TEMPLATE(BM_AVX, 256);
+BENCHMARK_TEMPLATE(BM_SSE, 256);
 BENCHMARK_TEMPLATE(BM_AVX_2, 256);
 BENCHMARK_TEMPLATE(BM_SISD, 384);
-BENCHMARK_TEMPLATE(BM_AVX, 384);
+BENCHMARK_TEMPLATE(BM_SSE, 384);
 BENCHMARK_TEMPLATE(BM_SISD, 512);
-BENCHMARK_TEMPLATE(BM_AVX, 512);
+BENCHMARK_TEMPLATE(BM_SSE, 512);
 BENCHMARK_TEMPLATE(BM_AVX_2, 512);
 
 //BENCHMARK_TEMPLATE(BM_SISD, 64);
