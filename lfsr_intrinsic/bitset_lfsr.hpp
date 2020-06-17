@@ -25,7 +25,8 @@ public:
     {
         static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
         for(auto x: tap_indicies)
-            polynom_.set(x);
+            if(x < bit_width_)
+                polynom_.set(x);
         for(int i = 0; i < bit_width_; ++i)
             state_.set(i, uniform_random(0, 1));
     }
