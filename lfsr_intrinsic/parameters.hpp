@@ -21,6 +21,24 @@ constexpr std::array<std::uint64_t, 8> maximum_cycle_polynom_head =
      0xA480000000000000
 };
 
+constexpr std::array<std::uint64_t, 1> poly64 =
+    {0xD800000000000000};
+constexpr std::array<std::uint64_t, 2> poly128 =
+    {0xD800000000000000, 0xD80010300006000};
+constexpr std::array<std::uint64_t, 3> poly192 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642};
+constexpr std::array<std::uint64_t, 4> poly256 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642, 0x492352638268ABCD};
+constexpr std::array<std::uint64_t, 5> poly320 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642, 0x492352638268ABCD, 0xFE};
+constexpr std::array<std::uint64_t, 6> poly384 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642, 0x492352638268ABCD, 0xFE, 0x12};
+constexpr std::array<std::uint64_t, 7> poly448 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642, 0x492352638268ABCD, 0xFE, 0x12, 0xABCDEF9274236};
+constexpr std::array<std::uint64_t, 8> poly512 =
+    {0xD800000000000000, 0xD80010300006000, 0xD526781452412642, 0x492352638268ABCD, 0xFE, 0x12, 0xABCDEF9274236, 0xCEC};
+
+
 constexpr std::array<std::array<std::size_t, 4>, 8> maximum_cycle_tap_indicies
 {{ {63, 62, 60, 59},
     {127, 126, 125, 120},

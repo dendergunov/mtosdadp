@@ -8,7 +8,18 @@ template<std::size_t bit_width>
 class bitset_lfsr
 {
 public:
-    bitset_lfsr(std::array<std::size_t, 4> tap_indicies)
+    bitset_lfsr(const std::array<std::size_t, 4>& tap_indicies)
+        : bit_width_(bit_width),
+        width_(bit_width / 64)
+    {
+        static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
+        for(auto x: tap_indicies)
+            polynom_.set(x);
+        for(int i = 0; i < bit_width_; ++i)
+            state_.set(i, uniform_random(0, 1));
+    }
+
+    bitset_lfsr(const std::vector<std::uint64_t>& tap_indicies)
         : bit_width_(bit_width),
         width_(bit_width / 64)
     {

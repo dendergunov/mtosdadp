@@ -23,6 +23,22 @@ public:
             x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
     };
 
+    sisd_lfsr(const std::array<std::uint64_t, bit_width/64>& poly)
+        : bit_width_(bit_width),
+        width_(bit_width/64),
+        polynom_{0},
+        state_{0}
+    {
+        static_assert(bit_width>0 && !(bit_width%64), "Number of bits has to be a multiple of 64!");
+
+        for(int i = width_-1; i>=0; --i)
+            polynom_[i]=poly[i];
+
+        for(auto& x: state_)
+            x = uniform_random(0, std::numeric_limits<std::uint64_t>::max());
+    };
+
+
     void print_state()
     {
         std::cout << "\nState:\n";
