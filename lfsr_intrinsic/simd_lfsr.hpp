@@ -66,7 +66,7 @@ public:
 
     bool clock()
     {
-        bool output_bit = _mm_extract_epi8(state_[0], 0) & 0x1;
+        bool output_bit = _mm_extract_epi32(state_[0], 0) & 0x1;
         bool ob = output_bit;
         bool carrier_bit = output_bit;
 
@@ -77,7 +77,7 @@ public:
                 state_[i] = _mm_xor_si128(state_[i], polynom_[i]);
             }
             least_bits = _mm_and_si128(state_[i], mask);
-            output_bit = _mm_extract_epi8(least_bits, 0);
+            output_bit = _mm_extract_epi32(least_bits, 0);
             least_bits = _mm_srli_si128(least_bits, 8);
             least_bits = _mm_insert_epi64(least_bits, carrier_bit, 1);
             least_bits = _mm_slli_epi64(least_bits, 63);
@@ -165,7 +165,7 @@ public:
 
     bool clock()
     {
-        bool output_bit = _mm256_extract_epi8(state_[0], 0) & 0x1;
+        bool output_bit = _mm256_extract_epi32(state_[0], 0) & 0x1;
         bool ob = output_bit;
         bool carrier_bit = output_bit;
         __m256i least_bits;
