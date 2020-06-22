@@ -47,45 +47,6 @@ private:
     std::lock_guard<std::mutex> l_{m_};
 };
 
-class write_query
-{
-public:
-    write_query() : on_writing_(false), l_{} {};
-    void write(std::shared_ptr<boost::asio::ip::tcp::socket> socket_p, std::string s,
-               boost::asio::yield_context & yc, boost::system::error_code & ec)
-    {
-        {
-            std::lock_guard lg(list_access_);
-            l_.push_back(std::move(s));
-        }
-        bool exchanged, expected(false);
-        exchanged = on_writing_.compare_exchange_weak(expected, true);
-        if(exchanged){
-            while(true){
-                {
-                    std::lock_guard lg(list_access_);
-                    if(l_.empty()){
-                        on_writing_.store(false);
-                        break;
-                    }
-                    s = std::move(l_.front());
-                    l_.pop_front();
-                }
-                boost::asio::async_write(*socket_p, boost::asio::buffer(s, s.size()), yc[ec]);
-                if(ec){
-                    logger{} << "Write query: " << ec.message();
-                }
-            }
-        }
-    }
-private:
-    std::atomic_bool on_writing_;
-    std::mutex list_access_;
-    std::list<std::string> l_;
-};
-
-
-
 template<typename T>
 std::optional<T> from_chars(std::string_view sv_) noexcept
 {
@@ -146,14 +107,13 @@ int main(int argc, char* argv[4])
                     logger{} << "Failed to accept connection: " << ec.message();
                 else{
                     logger{} << "Client connected";
-                    boost::asio::spawn(socket.get_executor(),
-                                       [&ctx, socket=boost::asio::ip::tcp::socket{std::move(socket)}, limit]
+                    boost::asio::spawn(*socket.get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
+                                       [&ctx, socket=std::move(socket), limit]
                                        (boost::asio::yield_context yc) mutable {                                                
                         boost::system::error_code ec;
-                        std::shared_ptr<boost::asio::ip::tcp::socket> socket_p =
-                                std::make_shared<boost::asio::ip::tcp::socket>(std::move(socket));
 
-                        std::shared_ptr<write_query> wq_p = std::make_shared<write_query>();
+                        std::shared_ptr<boost::asio::ip::tcp::socket> socket_p =
+                            std::make_shared<boost::asio::ip::tcp::socket>(std::move(socket));
 
                         boost::asio::signal_set sig_child_signal(ctx, SIGCHLD);
                         sig_child_signal.async_wait([&](boost::system::error_code ec, int /*signal*/){
@@ -167,7 +127,8 @@ int main(int argc, char* argv[4])
                                                 boost::process::std_in < pterminal_p->pslave_name(),
                                                 (boost::process::std_out & boost::process::std_err) > pterminal_p->pslave_name());
 
-                        boost::asio::spawn(ctx, [socket_p, wq_p, pterminal_p, limit](boost::asio::yield_context yc) {
+                        boost::asio::spawn(*socket_p->get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
+                                           [socket_p, pterminal_p, limit](boost::asio::yield_context yc) {
                             boost::system::error_code ec;
                             std::string out_buf;
                             out_buf.resize(limit*2);
@@ -178,7 +139,7 @@ int main(int argc, char* argv[4])
                                     return;
                                 }
                                 add_r(out_buf, str_size);
-                                wq_p->write(socket_p, out_buf, yc, ec);
+                                boost::asio::async_write(*socket_p, boost::asio::buffer(out_buf, out_buf.size()), yc[ec]);
                                 out_buf.clear();
                                 out_buf.resize(limit*2);
                                 if(ec){
@@ -222,15 +183,15 @@ int main(int argc, char* argv[4])
                                     switch(opt){
                                     case code_bytes::DO:
                                         o[1] = code_bytes::WONT;
-                                        wq_p->write(socket_p, std::string(o), yc, ec);
+                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     case code_bytes::WILL:
                                         o[1] = code_bytes::DONT;
-                                        wq_p->write(socket_p, std::string(o), yc, ec);
+                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     case code_bytes::WONT:
                                         o[1] = code_bytes::DONT;
-                                        wq_p->write(socket_p, std::string(o), yc, ec);
+                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     default: //DONT
                                         break;
@@ -243,7 +204,7 @@ int main(int argc, char* argv[4])
                                         kill(c.id(), SIGINT);
                                         break;
                                     case code_bytes::AYT:
-                                        wq_p->write(socket_p, "Server is online...\n", yc, ec);
+                                        boost::asio::async_write(*socket_p, boost::asio::buffer("Server is online"), yc[ec]);
                                         break;
                                     default:
                                         break;
@@ -258,7 +219,7 @@ int main(int argc, char* argv[4])
                             str_size = socket_p->async_read_some(boost::asio::buffer(in_buf, limit), yc[ec]);
                             if(ec){
                                 logger{} << "socket async_read: " << ec.message();
-                                socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                socket_p->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                 break;
                             }
                             filter_commands();
