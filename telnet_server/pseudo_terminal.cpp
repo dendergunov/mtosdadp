@@ -7,23 +7,31 @@
 #include <boost/asio/io_context.hpp>
 
 pty::pty(boost::asio::io_context& ctx)
-    :   master(ctx)
+    :   master(ctx),
+    pmaster_id_(posix_openpt(O_RDWR | O_NOCTTY))
 {
     int ec;
-    pmaster_id_ = posix_openpt(O_RDWR);
     if(pmaster_id_ < 0)
         throw std::runtime_error("Error in creating pty - posix_openpt()");
     ec = grantpt(pmaster_id_);
-    if(ec)
+    if(ec){
+        close(pmaster_id_);
         throw std::runtime_error("Error in creating pty - grant_pt()");
-    ec = unlockpt(pmaster_id_);
-    if(ec)
-        throw std::runtime_error("Error in creating pty - unlockpt()");
-    try {
-        pslave_name_ = ptsname(pmaster_id_); //ptsname can return NULL if slave terminal can not be created
-    }  catch (const std::exception& e) {
-        std::cerr << "Error in ptsname " << e.what() << '\n';
     }
+
+    ec = unlockpt(pmaster_id_);
+    if(ec){
+        close(pmaster_id_);
+        throw std::runtime_error("Error in creating pty - unlockpt()");
+    }
+
+    pslave_name_.resize(60);
+    ec = ptsname_r(pmaster_id_, pslave_name_.data(), pslave_name_.size());
+    if(ec){
+        close(pmaster_id_);
+        throw std::runtime_error("Error in ptsname_r\n");
+    }
+
     master.assign(pmaster_id_);
 }
 
