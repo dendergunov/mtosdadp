@@ -2,6 +2,7 @@
 
 #include <event2/event.h>
 #include <event2/bufferevent.h>
+#include <event2/buffer.h>
 #include <event2/thread.h>
 
 #include <arpa/inet.h>
@@ -55,10 +56,44 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
     if(events & BEV_EVENT_CONNECTED){
-        std::cout << "CONNECTED KEKW\n";
+        logger{} << "Sucessfully connected to telnet server!";
     } else if(events & BEV_EVENT_ERROR){
-        throw std::runtime_error("Error connecting to 127.0.0.1:8080");
+        throw std::runtime_error(format("Error connecting to server!"));
     }
+}
+
+void readcb(struct bufferevent *bev, void *ptr)
+{
+    //logger{} << "Readcb";
+    struct evbuffer *in = bufferevent_get_input(bev);
+    int length = evbuffer_get_length(in);
+    //logger{} << length;
+
+    std::string readbuf;
+    readbuf.resize(length);
+    int ec;
+    ec = bufferevent_read(bev, readbuf.data(), length);
+    //logger{} << "Read " << ec << " bytes";
+    std::cout << readbuf;
+}
+
+void writecb(struct bufferevent *bev, void *ptr)
+{
+    std::cout << "Writecb\n";
+
+}
+
+void stdinrcb(evutil_socket_t fd, short what, void* arg)
+{
+    //logger{} << "srdinrcb!";
+    struct bufferevent * bev = static_cast<struct bufferevent *>(arg);
+    std::string input;
+    input.resize(2048);
+    std::cin.getline(input.data(), 2048);
+    input.append("\n");
+
+    bufferevent_write(bev, input.data(), input.size());
+
 }
 
 int main(int argc, char **argv)
@@ -67,16 +102,16 @@ int main(int argc, char **argv)
         if(argc < 4 || argc > 5)
             throw std::runtime_error(format("Usage: ", argv[0], " <ip-address> <port> <buffer_size> <thread_number>\n"));
 
-        sa_family_t address;
+        struct in_addr address;
         if(!inet_pton(AF_INET, argv[1], &address))
             throw std::runtime_error("Cannot convert ip address\n");
 
         auto port = from_chars<std::uint16_t>(argv[2]);
         if(!port || !*port)
-            throw std::runtime_error("Port must me in [1;65535]\n");
+            throw std::runtime_error("Port must be in [1;65535]\n");
 
         auto limit = from_chars<std::size_t>(argv[3]);
-        if(!port || !*port)
+        if(!limit || !*limit)
             throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]\n"));
 
         std::optional<std::uint32_t> threads;
@@ -88,31 +123,34 @@ int main(int argc, char **argv)
             threads = std::thread::hardware_concurrency();
         /**----------------------------------------------------------------------------------**/
 
-        struct event_base *base;
-        struct bufferevent *bev;
         struct sockaddr_in sin;
-
-        base = event_base_new();
-        if(!base)
-            throw std::runtime_error("Can't create event_base!");
-
         memset(&sin, 0, sizeof(sin));
         sin.sin_family = AF_INET;
-        sin.sin_addr.s_addr = htonl(0x7f000001);
-        sin.sin_port = htons(8080);
+        sin.sin_addr.s_addr = address.s_addr;
+        sin.sin_port = htons(*port);
 
-        bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+        /**----------------------------------------------------------------------------------**/
 
-        bufferevent_setcb(bev, NULL, NULL, eventcb, NULL);
+        libevent::event_base_w evbase;
+        libevent::bufferevent_w bev(evbase);
 
-        if(bufferevent_socket_connect(bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
-            bufferevent_free(bev);
-            event_base_free(base);
+
+        bufferevent_setcb(bev.bev, readcb, NULL, eventcb, NULL);
+        bufferevent_enable(bev.bev, EV_READ|EV_WRITE);
+
+        if(bufferevent_socket_connect(bev.bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
             throw std::runtime_error("bufferevent_socket_connect error");
             return -1;
         }
 
-        event_base_dispatch(base);
+        libevent::bufferevent_w stdcin(evbase);
+
+        libevent::event_w stdreading;
+        stdreading.ev = event_new(evbase.base, 0, EV_READ | EV_PERSIST, stdinrcb, bev.bev);
+
+        event_add(stdreading.ev, NULL);
+
+        event_base_dispatch(evbase.base);
     }  catch (std::exception& e) {
         std::cerr << e.what();
     }
