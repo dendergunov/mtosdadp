@@ -12,6 +12,9 @@ include(FindPkgConfig)
 pkg_check_modules(event REQUIRED IMPORTED_TARGET libevent>=2.1)
 
 
-add_executable(telnet_client main.cpp event_wrappers.hpp)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS program_options)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::event Threads::Threads)
+add_executable(telnet_client main.cpp event_wrappers.hpp
+    filter_utils.cpp filter_utils.hpp)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::event Threads::Threads Boost::program_options)

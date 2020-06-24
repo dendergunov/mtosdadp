@@ -16,6 +16,8 @@
 #include <optional>
 #include <thread>
 
+#include <boost/program_options.hpp>
+
 template<typename... Ts>
 std::string format(Ts&&... args)
 {
@@ -96,34 +98,56 @@ void stdinrcb(evutil_socket_t fd, short what, void* arg)
     add_r(input, size);
 
     bufferevent_write(bev, input.data(), size);
-
 }
 
 int main(int argc, char **argv)
 {
     try {
-        if(argc < 4 || argc > 5)
-            throw std::runtime_error(format("Usage: ", argv[0], " <ip-address> <port> <buffer_size> <thread_number>\n"));
+        std::string address_str, port_str, limit_str, thread_str, connection_str;
+
+        boost::program_options::options_description desc("Allowed options");
+        desc.add_options()
+        ("help", "Produce this message")
+        ("ip-address", boost::program_options::value<std::string>(&address_str)->default_value("127.0.0.1"), "specify host ip-address")
+        ("port", boost::program_options::value<std::string>(&port_str)->default_value("23"), "specify port")
+        ("buffer-limit", boost::program_options::value<std::string>(&limit_str)->default_value("2048"), "set I/O buffer in bytes")
+        ("thread-number", boost::program_options::value<std::string>(&thread_str)->default_value("1"), "set the amount of working threads")
+        ("connection-number", boost::program_options::value<std::string>(&connection_str)->default_value("1"), "set the number of connections");
+        boost::program_options::variables_map vm;
+        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+        boost::program_options::notify(vm);
+
+        if(vm.count("help")) {
+            std::cout << desc << std::endl;
+            return 0;
+        }
 
         struct in_addr address;
-        if(!inet_pton(AF_INET, argv[1], &address))
+        if(!inet_pton(AF_INET, address_str.data(), &address))
             throw std::runtime_error("Cannot convert ip address\n");
 
-        auto port = from_chars<std::uint16_t>(argv[2]);
+        auto port = from_chars<std::uint16_t>(port_str);
         if(!port || !*port)
             throw std::runtime_error("Port must be in [1;65535]\n");
 
-        auto limit = from_chars<std::size_t>(argv[3]);
+        auto limit = from_chars<std::size_t>(limit_str);
         if(!limit || !*limit)
             throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]\n"));
 
-        std::optional<std::uint32_t> threads;
-        if(argc==5){
-            threads = from_chars<std::uint32_t>(argv[4]);
-            if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
-                throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency(), "]\n"));
-        } else
-            threads = std::thread::hardware_concurrency();
+        auto threads = from_chars<std::uint32_t>(thread_str);
+        if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
+            throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency(), "]\n"));
+
+        auto connections = from_chars<std::uint32_t>(connection_str);
+        if(!connections || !*connections)
+            throw std::runtime_error(format("Number of connections must be in [1;", std::numeric_limits<std::uint32_t>::max, "]\n"));
+
+        std::cout << "Execution with next parameters:"
+                  << "\nip-address: " << address_str
+                  << "\nport: " << port_str
+                  << "\nnumber of threads: " << thread_str
+                  << "\nnumber of connections: " << connection_str << std::endl;
+
         /**----------------------------------------------------------------------------------**/
 
         struct sockaddr_in sin;
