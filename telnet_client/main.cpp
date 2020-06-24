@@ -1,4 +1,5 @@
 #include "event_wrappers.hpp"
+#include "filter_utils.hpp"
 
 #include <event2/event.h>
 #include <event2/bufferevent.h>
@@ -91,8 +92,10 @@ void stdinrcb(evutil_socket_t fd, short what, void* arg)
     input.resize(2048);
     std::cin.getline(input.data(), 2048);
     input.append("\n");
+    auto size = input.size();
+    add_r(input, size);
 
-    bufferevent_write(bev, input.data(), input.size());
+    bufferevent_write(bev, input.data(), size);
 
 }
 
