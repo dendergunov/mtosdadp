@@ -61,7 +61,10 @@ struct bufferevent_w
     bufferevent_w& operator=(const bufferevent_w& other) = delete;
 
     ~bufferevent_w()
-        { bufferevent_free(bev); }
+        {
+            if(bev != nullptr)
+                bufferevent_free(bev);
+        }
 };
 
 struct event_w

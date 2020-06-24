@@ -15,6 +15,7 @@
 #include <charconv>
 #include <optional>
 #include <thread>
+#include <vector>
 
 #include <boost/program_options.hpp>
 
@@ -88,8 +89,8 @@ void writecb(struct bufferevent *bev, void *ptr)
 
 void stdinrcb(evutil_socket_t fd, short what, void* arg)
 {
-    //logger{} << "srdinrcb!";
-    struct bufferevent * bev = static_cast<struct bufferevent *>(arg);
+    logger{} << "srdinrcb!";
+    std::vector<libevent::bufferevent_w> *bev = static_cast<std::vector<libevent::bufferevent_w>*>(arg);
     std::string input;
     input.resize(2048);
     std::cin.getline(input.data(), 2048);
@@ -97,7 +98,11 @@ void stdinrcb(evutil_socket_t fd, short what, void* arg)
     auto size = input.size();
     add_r(input, size);
 
-    bufferevent_write(bev, input.data(), size);
+    auto bev_size = bev->size();
+    for(std::size_t i = 0; i < bev_size; ++i){
+        bufferevent_write((*bev)[i].bev, input.data(), size);
+    }
+
 }
 
 int main(int argc, char **argv)
@@ -158,22 +163,24 @@ int main(int argc, char **argv)
 
         /**----------------------------------------------------------------------------------**/
 
+        std::vector<libevent::bufferevent_w> bevents;
+        bevents.reserve(*connections);
+
         libevent::event_base_w evbase;
-        libevent::bufferevent_w bev(evbase);
 
-
-        bufferevent_setcb(bev.bev, readcb, NULL, eventcb, NULL);
-        bufferevent_enable(bev.bev, EV_READ|EV_WRITE);
-
-        if(bufferevent_socket_connect(bev.bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
-            throw std::runtime_error("bufferevent_socket_connect error");
-            return -1;
+        for(std::size_t i = 0; i < *connections; ++i){
+            bevents.emplace_back(libevent::bufferevent_w(evbase));
+            bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, NULL);
+            bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
+            if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
+                throw std::runtime_error("bufferevent_socket_connect error");
+                return -1;
+            }
         }
 
         libevent::bufferevent_w stdcin(evbase);
-
         libevent::event_w stdreading;
-        stdreading.ev = event_new(evbase.base, 0, EV_READ | EV_PERSIST, stdinrcb, bev.bev);
+        stdreading.ev = event_new(evbase.base, 0, EV_READ | EV_PERSIST, stdinrcb, &bevents);
 
         event_add(stdreading.ev, NULL);
 
