@@ -1,3 +1,5 @@
+#include "event_wrappers.hpp"
+
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/thread.h>
@@ -84,6 +86,7 @@ int main(int argc, char **argv)
                 throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency(), "]\n"));
         } else
             threads = std::thread::hardware_concurrency();
+        /**----------------------------------------------------------------------------------**/
 
         struct event_base *base;
         struct bufferevent *bev;
