@@ -47,6 +47,8 @@ private:
     std::lock_guard<std::mutex> l_{m_};
 };
 
+std::mutex logger::m_;
+
 template<typename T>
 std::optional<T> from_chars(std::string_view sv_) noexcept
 {
@@ -58,7 +60,25 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
     return {};
 }
 
-std::mutex logger::m_;
+struct telnet_session : std::enable_shared_from_this<telnet_session>
+{
+    telnet_session(boost::asio::io_context& ctx, boost::asio::ip::tcp::socket&& s)
+        : socket(std::move(s)),
+        pterminal(ctx),
+        c(ctx, "bash -i -s -l",
+          boost::process::std_in < pterminal.pslave_name(),
+                                 (boost::process::std_out & boost::process::std_err) > pterminal.pslave_name())
+    {}
+    telnet_session(telnet_session&& other)
+        : socket(std::move(other.socket)),
+        pterminal(std::move(other.pterminal)),
+        c(std::move(other.c))
+    {}
+
+    boost::asio::ip::tcp::socket socket;
+    pty pterminal;
+    boost::process::child c;
+};
 
 int main(int argc, char* argv[4])
 {
@@ -112,34 +132,31 @@ int main(int argc, char* argv[4])
                                        (boost::asio::yield_context yc) mutable {                                                
                         boost::system::error_code ec;
 
-                        std::shared_ptr<boost::asio::ip::tcp::socket> socket_p =
-                            std::make_shared<boost::asio::ip::tcp::socket>(std::move(socket));
+                        std::shared_ptr<telnet_session> session_p = std::make_shared<telnet_session>(ctx, std::move(socket));
 
-                        boost::asio::signal_set sig_child_signal(ctx, SIGCHLD);
+                        boost::asio::signal_set sig_child_signal(*session_p->socket.get_executor().target
+                                                                  <boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
+                                                                 SIGCHLD);
                         sig_child_signal.async_wait([&](boost::system::error_code ec, int /*signal*/){
                             if(ec)
                                 return;
+                            session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                             logger{} << "SIGCHLD";
                         });  
 
-                        std::shared_ptr<pty> pterminal_p = std::make_shared<pty>(ctx);
-                        boost::process::child c(ctx, "bash -i -s -l",
-                                                boost::process::std_in < pterminal_p->pslave_name(),
-                                                (boost::process::std_out & boost::process::std_err) > pterminal_p->pslave_name());
-
-                        boost::asio::spawn(*socket_p->get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
-                                           [socket_p, pterminal_p, limit](boost::asio::yield_context yc) {
+                        boost::asio::spawn(*session_p->socket.get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
+                                           [session_p, limit](boost::asio::yield_context yc) {
                             boost::system::error_code ec;
                             std::string out_buf;
                             out_buf.resize(limit*2);
                             for(;;){
-                                std::size_t str_size = pterminal_p->master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
+                                std::size_t str_size = session_p->pterminal.master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
                                 if(ec){
                                     logger{} << "master terminal async_read: " << ec.message();
                                     return;
                                 }
                                 add_r(out_buf, str_size);
-                                boost::asio::async_write(*socket_p, boost::asio::buffer(out_buf, out_buf.size()), yc[ec]);
+                                boost::asio::async_write(session_p->socket, boost::asio::buffer(out_buf, out_buf.size()), yc[ec]);
                                 out_buf.clear();
                                 out_buf.resize(limit*2);
                                 if(ec){
@@ -160,7 +177,7 @@ int main(int argc, char* argv[4])
                                 std::string::size_type cmd_pos = iac_pos+1;
                                 if(cmd_pos >= str_size){
                                     char two_bytes[2];
-                                    boost::asio::async_read(*socket_p, boost::asio::buffer(two_bytes, 2), yc[ec]);
+                                    boost::asio::async_read(session_p->socket, boost::asio::buffer(two_bytes, 2), yc[ec]);
                                     if(ec)
                                         return;
                                     in_buf.append(two_bytes, 2);
@@ -171,7 +188,7 @@ int main(int argc, char* argv[4])
                                     char opt;
                                     if((cmd_pos + 1) >= str_size){
                                         char one_byte[1];
-                                        boost::asio::async_read(*socket_p, boost::asio::buffer(one_byte, 1), yc[ec]);
+                                        boost::asio::async_read(session_p->socket, boost::asio::buffer(one_byte, 1), yc[ec]);
                                         if(ec)
                                             return;
                                         in_buf.append(one_byte, 1);
@@ -183,15 +200,15 @@ int main(int argc, char* argv[4])
                                     switch(opt){
                                     case code_bytes::DO:
                                         o[1] = code_bytes::WONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
+                                        boost::asio::async_write(session_p->socket, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     case code_bytes::WILL:
                                         o[1] = code_bytes::DONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
+                                        boost::asio::async_write(session_p->socket, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     case code_bytes::WONT:
                                         o[1] = code_bytes::DONT;
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer(o), yc[ec]);
+                                        boost::asio::async_write(session_p->socket, boost::asio::buffer(o), yc[ec]);
                                         break;
                                     default: //DONT
                                         break;
@@ -201,10 +218,10 @@ int main(int argc, char* argv[4])
                                 } else {
                                     switch(cmd){
                                     case code_bytes::IP:
-                                        kill(c.id(), SIGINT);
+                                        kill(session_p->c.id(), SIGINT);
                                         break;
                                     case code_bytes::AYT:
-                                        boost::asio::async_write(*socket_p, boost::asio::buffer("Server is online"), yc[ec]);
+                                        boost::asio::async_write(session_p->socket, boost::asio::buffer("Server is online"), yc[ec]);
                                         break;
                                     default:
                                         break;
@@ -216,18 +233,18 @@ int main(int argc, char* argv[4])
                         };
 
                         for(;;){
-                            str_size = socket_p->async_read_some(boost::asio::buffer(in_buf, limit), yc[ec]);
+                            str_size = session_p->socket.async_read_some(boost::asio::buffer(in_buf, limit), yc[ec]);
                             if(ec){
                                 logger{} << "socket async_read: " << ec.message();
-                                socket_p->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                 break;
                             }
                             filter_commands();
                             filter_r(in_buf, str_size);
-                            boost::asio::async_write(pterminal_p->master, boost::asio::buffer(in_buf, str_size), yc[ec]);
+                            boost::asio::async_write(session_p->pterminal.master, boost::asio::buffer(in_buf, str_size), yc[ec]);
                             if(ec){
                                 logger{} << "master terminal async_write: " << ec.message();
-                                pterminal_p->master.close();
+                                session_p->pterminal.master.close();
                                 break;
                             }
                         }
