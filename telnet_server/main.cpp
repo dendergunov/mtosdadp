@@ -160,10 +160,10 @@ int main(int argc, char* argv[4])
                                     //session_p->pterminal.master.close();
                                     return;
                                 }
-                                add_r(out_buf, str_size);
-                                boost::asio::async_write(session_p->socket, boost::asio::buffer(out_buf, out_buf.size()), yc[ec]);
-                                out_buf.clear();
-                                out_buf.resize(limit*2);
+                                //add_r(out_buf, str_size);
+                                boost::asio::async_write(session_p->socket, boost::asio::buffer(out_buf, str_size), yc[ec]);
+//                                out_buf.clear();
+//                                out_buf.resize(limit*2);
                                 if(ec){
                                     logger{} << "socket async_send: " << ec.message();
                                     session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
