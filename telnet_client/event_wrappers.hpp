@@ -38,27 +38,45 @@ struct event_base_w
 
 struct bufferevent_w
 {
+    std::size_t bytes_read_threshold;
+    std::size_t bytes_read;
     bufferevent* bev;
 
-    bufferevent_w(event_base_w& ebw)
+    bufferevent_w(event_base_w& ebw, std::size_t brthsh) :
+        bytes_read_threshold(brthsh),
+        bytes_read(0)
     {
          bev = bufferevent_socket_new(ebw.base, -1, BEV_OPT_CLOSE_ON_FREE);
          if(!bev)
              throw std::runtime_error("Cannot create bufferevent\n");
     }
+
     bufferevent_w(bufferevent_w&& other)
-        : bev(other.bev)
+        : bytes_read_threshold(other.bytes_read_threshold),
+        bytes_read(other.bytes_read),
+        bev(other.bev)
         { other.bev = nullptr; }
+
     bufferevent_w& operator=(bufferevent_w&& other)
     {
         bufferevent_free(bev);
         bev = other.bev;
         other.bev = nullptr;
+        bytes_read = other.bytes_read;
+        bytes_read_threshold = other.bytes_read_threshold;
 
         return *this;
     }
     bufferevent_w(const bufferevent_w& other) = delete;
     bufferevent_w& operator=(const bufferevent_w& other) = delete;
+
+    void close()
+    {
+        if(bev != nullptr){
+            bufferevent_free(bev);
+            bev = nullptr;
+        }
+    }
 
     ~bufferevent_w()
         {

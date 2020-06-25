@@ -62,28 +62,51 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
     if(events & BEV_EVENT_CONNECTED){
         logger{} << "Sucessfully connected to telnet server!";
     } else if(events & BEV_EVENT_ERROR){
-        throw std::runtime_error(format("Error connecting to server!"));
+        logger{} << "Error connecting to server!";
     }
 }
 
 void readcb(struct bufferevent *bev, void *ptr)
 {
-    //logger{} << "Readcb";
+    auto libev = static_cast<libevent::bufferevent_w*>(ptr);
     struct evbuffer *in = bufferevent_get_input(bev);
-    int length = evbuffer_get_length(in);
-    //logger{} << length;
+    std::size_t length = evbuffer_get_length(in);
 
-    std::string readbuf;
-    readbuf.resize(length);
-    int ec;
-    ec = bufferevent_read(bev, readbuf.data(), length);
-    //logger{} << "Read " << ec << " bytes";
-    std::cout << readbuf;
+    if(length){
+        libev->bytes_read += length;
+        evbuffer_drain(in, length);
+    }
+    if(libev->bytes_read >= libev->bytes_read_threshold){
+//        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold;
+        libev->close();
+    }
 }
 
-void writecb(struct bufferevent *bev, void *ptr)
+void mainreadcb(struct bufferevent *bev, void *ptr)
 {
-    std::cout << "Writecb\n";
+    auto libev = static_cast<libevent::bufferevent_w*>(ptr);
+
+    struct evbuffer *in = bufferevent_get_input(bev);
+    int length = evbuffer_get_length(in);
+
+    if(length){
+        libev->bytes_read += length;
+//        evbuffer_drain(in, length);
+    }
+
+//    std::string readbuf;
+//    readbuf.resize(length);
+//    int ec;
+//    ec = bufferevent_read(bev, readbuf.data(), length);
+//    logger{} << "Read " << ec << " bytes";
+//    logger{} << "Total: " << libev->bytes_read;
+//    std::cout << readbuf;
+
+    if(libev->bytes_read >= libev->bytes_read_threshold){
+        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold;
+        libev->close();
+    }
+
 
 }
 
@@ -167,7 +190,6 @@ int main(int argc, char **argv)
         std::vector<libevent::bufferevent_w> bevents;
         bevents.reserve(*connections);
 
-
         std::vector<libevent::event_base_w> evbases;
         evbases.reserve(*threads);
         for(std::size_t i = 0; i < *threads; ++i)
@@ -177,26 +199,30 @@ int main(int argc, char **argv)
         workers.reserve(*threads-1);
 
         for(std::size_t i = 0; i < *connections; ++i){
-            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()]));
-            bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, NULL);
+            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()], 4000));
+            if(i == 0)
+                bufferevent_setcb(bevents[i].bev, mainreadcb, NULL, eventcb, &bevents[i]);
+            else
+                bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, &bevents[i]);
             bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
             if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
-                throw std::runtime_error("bufferevent_socket_connect error");
+                throw std::runtime_error(format("bufferevent_socket_connect error on ", i, " socket"));
                 return -1;
             }
         }
 
-        for(unsigned int i=1; i<*threads; ++i){
+        for(unsigned int i = 1; i < *threads; ++i){
             workers.emplace_back([&]{
-                event_base_dispatch(evbases[i].base);
+                static int i = 1;
+                event_base_dispatch(evbases[i++].base);
             });
         }
 
-        libevent::bufferevent_w stdcin(evbases[0]);
-        libevent::event_w stdreading;
-        stdreading.ev = event_new(evbases[0].base, 0, EV_READ | EV_PERSIST, stdinrcb, &bevents);
+//        libevent::bufferevent_w stdcin(evbases[0], 0);
+//        libevent::event_w stdreading;
+//        stdreading.ev = event_new(evbases[0].base, 0, EV_READ | EV_PERSIST, stdinrcb, &bevents);
 
-        event_add(stdreading.ev, NULL);
+//        event_add(stdreading.ev, NULL);
 
         event_base_dispatch(evbases[0].base);
     }  catch (std::exception& e) {

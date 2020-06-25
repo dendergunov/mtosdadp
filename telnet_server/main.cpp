@@ -141,6 +141,8 @@ int main(int argc, char* argv[4])
                             if(ec)
                                 return;
                             session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                            //session_p->c.terminate();
+                            //session_p->pterminal.master.close();
                             logger{} << "SIGCHLD";
                         });  
 
@@ -153,6 +155,9 @@ int main(int argc, char* argv[4])
                                 std::size_t str_size = session_p->pterminal.master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
                                 if(ec){
                                     logger{} << "master terminal async_read: " << ec.message();
+                                    session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                    //session_p->c.terminate();
+                                    //session_p->pterminal.master.close();
                                     return;
                                 }
                                 add_r(out_buf, str_size);
@@ -161,6 +166,9 @@ int main(int argc, char* argv[4])
                                 out_buf.resize(limit*2);
                                 if(ec){
                                     logger{} << "socket async_send: " << ec.message();
+                                    session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                    //session_p->c.terminate();
+                                    //session_p->pterminal.master.close();
                                     return;
                                 }
                             }
@@ -237,6 +245,8 @@ int main(int argc, char* argv[4])
                             if(ec){
                                 logger{} << "socket async_read: " << ec.message();
                                 session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                //session_p->c.terminate();
+                                //session_p->pterminal.master.close();
                                 break;
                             }
                             filter_commands();
@@ -244,7 +254,9 @@ int main(int argc, char* argv[4])
                             boost::asio::async_write(session_p->pterminal.master, boost::asio::buffer(in_buf, str_size), yc[ec]);
                             if(ec){
                                 logger{} << "master terminal async_write: " << ec.message();
-                                session_p->pterminal.master.close();
+                                session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+                                //session_p->c.terminate();
+                                //session_p->pterminal.master.close();
                                 break;
                             }
                         }
