@@ -59,8 +59,9 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
 
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
+    static int total_connected = 0;
     if(events & BEV_EVENT_CONNECTED){
-        logger{} << "Sucessfully connected to telnet server!";
+        logger{} << "Sucessfully connected to telnet server! " << ++total_connected;
     } else if(events & BEV_EVENT_ERROR){
         logger{} << "Error connecting to server!";
     }
@@ -77,22 +78,23 @@ void readcb(struct bufferevent *bev, void *ptr)
         evbuffer_drain(in, length);
     }
     if(libev->bytes_read >= libev->bytes_read_threshold){
-//        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold;
+        static int i = 0;
+        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold << ", socket" << ++i;
         libev->close();
     }
 }
 
-void mainreadcb(struct bufferevent *bev, void *ptr)
-{
-    auto libev = static_cast<libevent::bufferevent_w*>(ptr);
+//void mainreadcb(struct bufferevent *bev, void *ptr)
+//{
+//    auto libev = static_cast<libevent::bufferevent_w*>(ptr);
 
-    struct evbuffer *in = bufferevent_get_input(bev);
-    int length = evbuffer_get_length(in);
+//    struct evbuffer *in = bufferevent_get_input(bev);
+//    int length = evbuffer_get_length(in);
 
-    if(length){
-        libev->bytes_read += length;
-//        evbuffer_drain(in, length);
-    }
+//    if(length){
+//        libev->bytes_read += length;
+////        evbuffer_drain(in, length);
+//    }
 
 //    std::string readbuf;
 //    readbuf.resize(length);
@@ -100,47 +102,50 @@ void mainreadcb(struct bufferevent *bev, void *ptr)
 //    ec = bufferevent_read(bev, readbuf.data(), length);
 //    logger{} << "Read " << ec << " bytes";
 //    logger{} << "Total: " << libev->bytes_read;
-//    std::cout << readbuf;
+//    std::cout << readbuf << std::flush;
 
-    if(libev->bytes_read >= libev->bytes_read_threshold){
-        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold;
-        libev->close();
-    }
+//    if(libev->bytes_read >= libev->bytes_read_threshold){
+//        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold;
+//        libev->close();
+//    }
+//}
+
+//void stdinrcb(evutil_socket_t fd, short what, void* arg)
+//{
+////    logger{} << "srdinrcb!";
+//    std::vector<libevent::bufferevent_w> *bev = static_cast<std::vector<libevent::bufferevent_w>*>(arg);
+//    std::string input;
+//    input.resize(2048);
+//    std::cin.getline(input.data(), 2048);
+//    input.append("\n");
+//    auto size = input.size();
+//    add_r(input, size);
+
+//    auto bev_size = bev->size();
+//    for(std::size_t i = 0; i < bev_size; ++i){
+//        bufferevent_write((*bev)[i].bev, input.data(), size);
+//    }
+//}
 
 
-}
-
-void stdinrcb(evutil_socket_t fd, short what, void* arg)
-{
-    logger{} << "srdinrcb!";
-    std::vector<libevent::bufferevent_w> *bev = static_cast<std::vector<libevent::bufferevent_w>*>(arg);
-    std::string input;
-    input.resize(2048);
-    std::cin.getline(input.data(), 2048);
-    input.append("\n");
-    auto size = input.size();
-    add_r(input, size);
-
-    auto bev_size = bev->size();
-    for(std::size_t i = 0; i < bev_size; ++i){
-        bufferevent_write((*bev)[i].bev, input.data(), size);
-    }
-
-}
 
 int main(int argc, char **argv)
 {
     try {
-        std::string address_str, port_str, limit_str, thread_str, connection_str;
+        std::string address_str, port_str, thread_str, connection_str, recieve_threshold_str, policy_str;
 
         boost::program_options::options_description desc("Allowed options");
         desc.add_options()
         ("help", "Produce this message")
         ("ip-address", boost::program_options::value<std::string>(&address_str)->default_value("127.0.0.1"), "specify host ip-address")
         ("port", boost::program_options::value<std::string>(&port_str)->default_value("23"), "specify port")
-        ("buffer-limit", boost::program_options::value<std::string>(&limit_str)->default_value("2048"), "set I/O buffer in bytes")
         ("thread-number", boost::program_options::value<std::string>(&thread_str)->default_value("1"), "set the amount of working threads")
-        ("connection-number", boost::program_options::value<std::string>(&connection_str)->default_value("1"), "set the number of connections");
+        ("connection-number", boost::program_options::value<std::string>(&connection_str)->default_value("1"), "set the number of connections")
+        ("recieve-threshold", boost::program_options::value<std::string>(&recieve_threshold_str)->default_value("4096"), "set the number of bytes to recieve "
+                                                                                                                  "before socket shutdown")
+        ("policy", boost::program_options::value<std::string>(&policy_str)->default_value("0"), "set 0 to send a little message to get a light answer "
+                                                                                                     "or 1 to send a light message to get a heavy answer "
+                                                                                                     "or 2 to send a heavy message to get a heavy answer");
         boost::program_options::variables_map vm;
         boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
         boost::program_options::notify(vm);
@@ -158,10 +163,6 @@ int main(int argc, char **argv)
         if(!port || !*port)
             throw std::runtime_error("Port must be in [1;65535]\n");
 
-        auto limit = from_chars<std::size_t>(limit_str);
-        if(!limit || !*limit)
-            throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]\n"));
-
         auto threads = from_chars<std::uint32_t>(thread_str);
         if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
             throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency(), "]\n"));
@@ -170,11 +171,23 @@ int main(int argc, char **argv)
         if(!connections || !*connections)
             throw std::runtime_error(format("Number of connections must be in [1;", std::numeric_limits<std::uint32_t>::max, "]\n"));
 
-        std::cout << "Execution with next parameters:"
+        auto read_byte_threshold = from_chars<std::size_t>(recieve_threshold_str);
+        if(!read_byte_threshold || !*read_byte_threshold)
+            throw std::runtime_error(format("Recieve threshold must be in [1;", std::numeric_limits<std::size_t>::max, "\n"));
+
+        auto policy = from_chars<int>(policy_str);
+        if(!policy)
+            throw std::runtime_error(format("policy must be in [0;2]"));
+        if(*policy < 0 || *policy > 2)
+            throw std::runtime_error(format("Policy must be in [0;2]"));
+
+        std::cout << "Execution with the next parameters:"
                   << "\nip-address: " << address_str
                   << "\nport: " << port_str
                   << "\nnumber of threads: " << thread_str
-                  << "\nnumber of connections: " << connection_str << std::endl;
+                  << "\nnumber of connections: " << connection_str
+                  << "\nrecieve threshold: " << recieve_threshold_str
+                  << "\ntransmission policy: " << policy_str << std::endl;
 
         /**----------------------------------------------------------------------------------**/
 
@@ -199,10 +212,10 @@ int main(int argc, char **argv)
         workers.reserve(*threads-1);
 
         for(std::size_t i = 0; i < *connections; ++i){
-            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()], 4000));
-            if(i == 0)
-                bufferevent_setcb(bevents[i].bev, mainreadcb, NULL, eventcb, &bevents[i]);
-            else
+            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()], *read_byte_threshold));
+//            if(i == 0)
+//                bufferevent_setcb(bevents[i].bev, mainreadcb, NULL, eventcb, &bevents[i]);
+//            else
                 bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, &bevents[i]);
             bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
             if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
@@ -225,6 +238,11 @@ int main(int argc, char **argv)
 //        event_add(stdreading.ev, NULL);
 
         event_base_dispatch(evbases[0].base);
+
+        for(auto& x: workers){
+            x.join();
+        }
+
     }  catch (std::exception& e) {
         std::cerr << e.what();
     }
