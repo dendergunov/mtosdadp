@@ -162,14 +162,22 @@ int main(int argc, char **argv)
         sin.sin_port = htons(*port);
 
         /**----------------------------------------------------------------------------------**/
+        evthread_use_pthreads();
 
         std::vector<libevent::bufferevent_w> bevents;
         bevents.reserve(*connections);
 
-        libevent::event_base_w evbase;
+
+        std::vector<libevent::event_base_w> evbases;
+        evbases.reserve(*threads);
+        for(std::size_t i = 0; i < *threads; ++i)
+            evbases.emplace_back();
+
+        std::vector<std::thread> workers;
+        workers.reserve(*threads-1);
 
         for(std::size_t i = 0; i < *connections; ++i){
-            bevents.emplace_back(libevent::bufferevent_w(evbase));
+            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()]));
             bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, NULL);
             bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
             if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
@@ -178,13 +186,19 @@ int main(int argc, char **argv)
             }
         }
 
-        libevent::bufferevent_w stdcin(evbase);
+        for(unsigned int i=1; i<*threads; ++i){
+            workers.emplace_back([&]{
+                event_base_dispatch(evbases[i].base);
+            });
+        }
+
+        libevent::bufferevent_w stdcin(evbases[0]);
         libevent::event_w stdreading;
-        stdreading.ev = event_new(evbase.base, 0, EV_READ | EV_PERSIST, stdinrcb, &bevents);
+        stdreading.ev = event_new(evbases[0].base, 0, EV_READ | EV_PERSIST, stdinrcb, &bevents);
 
         event_add(stdreading.ev, NULL);
 
-        event_base_dispatch(evbase.base);
+        event_base_dispatch(evbases[0].base);
     }  catch (std::exception& e) {
         std::cerr << e.what();
     }
