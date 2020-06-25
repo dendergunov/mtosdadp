@@ -11,6 +11,7 @@
 #include <boost/process/async.hpp>
 #include <boost/process/async_pipe.hpp>
 #include <boost/process/io.hpp>
+#include <boost/program_options.hpp>
 
 #include <iostream>
 #include <mutex>
@@ -83,8 +84,40 @@ struct telnet_session : std::enable_shared_from_this<telnet_session>
 int main(int argc, char* argv[4])
 {
     try {
-        if(argc < 3 || argc > 4)
-            throw std::runtime_error(format("Usage: ", argv[0], " <listen-port> ", "<buffer-size> ", "<thread-number>"));
+        std::string port_str, thread_str, limit_str;
+        boost::program_options::options_description desc("Allowed options");
+        desc.add_options()
+            ("help", "Produce this message")
+                    ("port", boost::program_options::value<std::string>(&port_str)->default_value("23"), "specify port")
+                        ("thread-number", boost::program_options::value<std::string>(&thread_str)->default_value("1"), "set the amount of working threads")
+                        ("buffer-size", boost::program_options::value<std::string>(&limit_str)->default_value("2048"), "set the size of I/O buffers");
+        boost::program_options::variables_map vm;
+        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+        boost::program_options::notify(vm);
+
+        if(vm.count("help")) {
+            std::cout << desc << std::endl;
+            return 0;
+        }
+
+        auto port = from_chars<std::uint16_t>(port_str);
+        if(!port || !*port)
+            throw std::runtime_error("Port must me in [1;65535]");
+
+        auto limit = from_chars<std::size_t>(limit_str);
+        if(!limit || !*limit)
+            throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]"));
+
+        auto threads = from_chars<std::uint32_t>(thread_str);
+        if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
+            throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency(), "]\n"));
+
+        std::cout << "Execution with the next parameters:"
+                  << "\nport: " << port_str
+                  << "\nnumber of threads: " << thread_str
+                  << "\nbuffer size: " << limit_str << std::endl;
+
+
         boost::asio::io_context ctx;
         boost::asio::signal_set stop_signals{ctx, SIGINT, SIGTERM};
         stop_signals.async_wait([&](boost::system::error_code ec, int /*signal*/){
@@ -93,22 +126,6 @@ int main(int argc, char* argv[4])
             logger{} << "Terminating in response to signal.";
             ctx.stop();
         });
-
-        auto port = from_chars<std::uint16_t>(argv[1]);
-        if(!port || !*port)
-            throw std::runtime_error("Port must me in [1;65535]");
-
-        auto limit = from_chars<std::size_t>(argv[2]);
-        if(!port || !*port)
-            throw std::runtime_error(format("Buffer size must be in [1;", std::numeric_limits<std::size_t>::max, "]"));
-
-        std::optional<std::uint32_t> threads;
-        if(argc==4){
-            threads = from_chars<std::uint32_t>(argv[3]);
-            if(!threads || !*threads || *threads > std::thread::hardware_concurrency())
-            throw std::runtime_error(format("Number of threads should be in [1;", std::thread::hardware_concurrency()));
-        } else
-            threads = std::thread::hardware_concurrency();
 
         boost::asio::spawn(ctx, [&ctx, port=*port, limit=*limit](boost::asio::yield_context yc){
             boost::asio::ip::tcp::acceptor acceptor{ctx};

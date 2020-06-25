@@ -10,6 +10,6 @@ add_executable(${PROJECT_NAME} main.cpp
     filter_utils.cpp filter_utils.hpp
     pseudo_terminal.cpp pseudo_terminal.hpp)
 
-find_package(Boost 1.71.0 REQUIRED COMPONENTS chrono coroutine system thread)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS chrono coroutine system thread program_options)
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::chrono
-    Boost::coroutine Boost::system Boost::thread)
+    Boost::coroutine Boost::system Boost::thread Boost::program_options)
