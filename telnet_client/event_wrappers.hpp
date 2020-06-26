@@ -6,6 +6,7 @@
 #include <event2/bufferevent.h>
 
 #include <stdexcept>
+#include <string_view>
 
 namespace libevent {
 
@@ -39,12 +40,18 @@ struct event_base_w
 struct bufferevent_w
 {
     std::size_t bytes_read_threshold;
+    std::size_t bytes_send_threshold;
     std::size_t bytes_read;
+    std::size_t bytes_send;
     bufferevent* bev;
+    std::string_view send_message;
 
-    bufferevent_w(event_base_w& ebw, std::size_t brthsh) :
-        bytes_read_threshold(brthsh),
-        bytes_read(0)
+    bufferevent_w(event_base_w& ebw, std::size_t brthsh, std::size_t bsthsh, const std::string_view& message)
+        : bytes_read_threshold(brthsh),
+        bytes_send_threshold(bsthsh),
+        bytes_read(0),
+        bytes_send(0),
+        send_message(message)
     {
          bev = bufferevent_socket_new(ebw.base, -1, BEV_OPT_CLOSE_ON_FREE);
          if(!bev)
@@ -53,8 +60,11 @@ struct bufferevent_w
 
     bufferevent_w(bufferevent_w&& other)
         : bytes_read_threshold(other.bytes_read_threshold),
+        bytes_send_threshold(other.bytes_send_threshold),
         bytes_read(other.bytes_read),
-        bev(other.bev)
+        bytes_send(other.bytes_send),
+        bev(other.bev),
+        send_message(other.send_message)
         { other.bev = nullptr; }
 
     bufferevent_w& operator=(bufferevent_w&& other)
@@ -63,7 +73,9 @@ struct bufferevent_w
         bev = other.bev;
         other.bev = nullptr;
         bytes_read = other.bytes_read;
+        bytes_read = other.bytes_send;
         bytes_read_threshold = other.bytes_read_threshold;
+        send_message = other.send_message;
 
         return *this;
     }

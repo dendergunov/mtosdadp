@@ -59,8 +59,8 @@ std::optional<T> from_chars(std::string_view sv_) noexcept
 
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
-    static int total_connected = 0;
     if(events & BEV_EVENT_CONNECTED){
+        static int total_connected = 0;
         logger{} << "Sucessfully connected to telnet server! " << ++total_connected;
     } else if(events & BEV_EVENT_ERROR){
         logger{} << "Error connecting to server!";
@@ -79,9 +79,24 @@ void readcb(struct bufferevent *bev, void *ptr)
     }
     if(libev->bytes_read >= libev->bytes_read_threshold){
         static int i = 0;
-        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold << ", socket" << ++i;
+        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold
+                 << "\nbytes_send: "<< libev->bytes_send << ", threshold: " << libev->bytes_send_threshold
+                 << ", socket: " << ++i;
         libev->close();
     }
+}
+
+void writecb(struct bufferevent *bev, void *ptr)
+{
+    auto libev = static_cast<libevent::bufferevent_w*>(ptr);
+    libev->bytes_send += libev->send_message.size();
+
+    if(libev->bytes_send < libev->bytes_send_threshold){
+        bufferevent_write(bev, libev->send_message.data(), libev->send_message.size());
+    }
+//        else {
+//        logger{} << "bytes_send: " << libev->bytes_send;
+//    }
 }
 
 //void mainreadcb(struct bufferevent *bev, void *ptr)
@@ -126,8 +141,7 @@ void readcb(struct bufferevent *bev, void *ptr)
 //        bufferevent_write((*bev)[i].bev, input.data(), size);
 //    }
 //}
-
-
+std::string get_send_message(int policy, std::size_t send_byte_threshold, std::size_t read_byte_threshold);
 
 int main(int argc, char **argv)
 {
@@ -211,17 +225,31 @@ int main(int argc, char **argv)
         std::vector<std::thread> workers;
         workers.reserve(*threads-1);
 
+        std::size_t send_byte_threshold;
+        if(*policy == 1){
+            send_byte_threshold = 50;
+        } else {
+            send_byte_threshold = *read_byte_threshold;
+        }
+
+        std::string send_message = get_send_message(*policy, send_byte_threshold, *read_byte_threshold);
+
         for(std::size_t i = 0; i < *connections; ++i){
-            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()], *read_byte_threshold));
+            bevents.emplace_back(libevent::bufferevent_w(evbases[i%evbases.size()], *read_byte_threshold,
+                                                         send_byte_threshold, std::string_view(send_message.data(), send_message.size())));
 //            if(i == 0)
 //                bufferevent_setcb(bevents[i].bev, mainreadcb, NULL, eventcb, &bevents[i]);
 //            else
-                bufferevent_setcb(bevents[i].bev, readcb, NULL, eventcb, &bevents[i]);
+                bufferevent_setcb(bevents[i].bev, readcb, writecb, eventcb, &bevents[i]);
             bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
+        }
+
+        for(std::size_t i = 0; i < *connections; ++i){
             if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
                 throw std::runtime_error(format("bufferevent_socket_connect error on ", i, " socket"));
                 return -1;
             }
+            bufferevent_write(bevents[i].bev, send_message.data(), send_message.size());
         }
 
         for(unsigned int i = 1; i < *threads; ++i){
@@ -248,4 +276,28 @@ int main(int argc, char **argv)
     }
 
     return 0;
+}
+
+std::string get_send_message(int policy, std::size_t send_bytes_threshold, std::size_t read_byte_threshold)
+{
+    std::string message("light message");
+    std::size_t size = message.size();
+    switch(policy){
+    case 0:
+        return format("echo \"", message, "\"\n");
+        break;
+    case 1:
+        return format("for ((i=1;i<=", read_byte_threshold/message.size()+1, ";i+=1)); do echo \"", message ,"$i\"; done\n");
+    case 2:
+        if(send_bytes_threshold < 3000){
+            for(std::size_t i = 0; i <= send_bytes_threshold/size; ++i)
+                message.append("light message");
+        } else {
+            for(std::size_t i = 0; i <= 3000/size; ++i)
+                message.append("light message");
+        }
+        return format("echo \"", message, "\"\n");
+    default:
+        throw std::runtime_error(format("policy value ", policy, " cannot be accepted in get_send_message!"));
+    }
 }
