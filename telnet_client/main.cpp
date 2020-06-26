@@ -16,6 +16,7 @@
 #include <optional>
 #include <thread>
 #include <vector>
+#include <chrono>
 
 #include <boost/program_options.hpp>
 
@@ -244,6 +245,8 @@ int main(int argc, char **argv)
             bufferevent_enable(bevents[i].bev, EV_READ|EV_WRITE);
         }
 
+        auto start = std::chrono::high_resolution_clock::now();
+
         for(std::size_t i = 0; i < *connections; ++i){
             if(bufferevent_socket_connect(bevents[i].bev,(struct sockaddr *) &sin, sizeof(sin)) < 0){
                 throw std::runtime_error(format("bufferevent_socket_connect error on ", i, " socket"));
@@ -270,6 +273,11 @@ int main(int argc, char **argv)
         for(auto& x: workers){
             x.join();
         }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end-start;
+
+        logger{} << diff.count();
 
     }  catch (std::exception& e) {
         std::cerr << e.what();
