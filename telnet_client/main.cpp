@@ -62,7 +62,7 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
     if(events & BEV_EVENT_CONNECTED){
         static int total_connected = 0;
-        logger{} << "Sucessfully connected to telnet server! " << ++total_connected;
+//        logger{} << "Sucessfully connected to telnet server! " << ++total_connected;
     } else if(events & BEV_EVENT_ERROR){
         logger{} << "Error connecting to server!";
     }
@@ -80,9 +80,9 @@ void readcb(struct bufferevent *bev, void *ptr)
     }
     if(libev->bytes_read >= libev->bytes_read_threshold){
         static int i = 0;
-        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold
-                 << "\nbytes_send: "<< libev->bytes_send << ", threshold: " << libev->bytes_send_threshold
-                 << ", socket: " << ++i;
+//        logger{} << "bytes_read: " << libev->bytes_read << ", threshold: " << libev->bytes_read_threshold
+//                 << "\nbytes_send: "<< libev->bytes_send << ", threshold: " << libev->bytes_send_threshold
+//                 << ", socket: " << ++i;
         libev->close();
     }
 }
@@ -256,9 +256,8 @@ int main(int argc, char **argv)
         }
 
         for(unsigned int i = 1; i < *threads; ++i){
-            workers.emplace_back([&]{
-                static int i = 1;
-                event_base_dispatch(evbases[i++].base);
+            workers.emplace_back([&, index=i]{
+                event_base_dispatch(evbases[index].base);
             });
         }
 
