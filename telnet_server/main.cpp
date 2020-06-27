@@ -143,7 +143,7 @@ int main(int argc, char* argv[4])
                 if(ec)
                     logger{} << "Failed to accept connection: " << ec.message();
                 else{
-                    logger{} << "Client connected";
+//                    logger{} << "Client connected";
                     boost::asio::spawn(*socket.get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
                                        [&ctx, socket=std::move(socket), limit]
                                        (boost::asio::yield_context yc) mutable {                                                
@@ -151,17 +151,17 @@ int main(int argc, char* argv[4])
 
                         std::shared_ptr<telnet_session> session_p = std::make_shared<telnet_session>(ctx, std::move(socket));
 
-                        boost::asio::signal_set sig_child_signal(*session_p->socket.get_executor().target
-                                                                  <boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
-                                                                 SIGCHLD);
-                        sig_child_signal.async_wait([&](boost::system::error_code ec, int /*signal*/){
-                            if(ec)
-                                return;
-                            session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
-                            //session_p->c.terminate();
-                            //session_p->pterminal.master.close();
-                            logger{} << "SIGCHLD";
-                        });  
+//                        boost::asio::signal_set sig_child_signal(*session_p->socket.get_executor().target
+//                                                                  <boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
+//                                                                 SIGCHLD);
+//                        sig_child_signal.async_wait([&](boost::system::error_code ec, int /*signal*/){
+//                            if(ec)
+//                                return;
+//                            //session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
+//                            //session_p->c.terminate();
+//                            //session_p->pterminal.master.close();
+////                            logger{} << "SIGCHLD";
+//                        });
 
                         boost::asio::spawn(*session_p->socket.get_executor().target<boost::asio::strand<boost::asio::ip::tcp::socket::executor_type>>(),
                                            [session_p, limit](boost::asio::yield_context yc) {
@@ -171,7 +171,7 @@ int main(int argc, char* argv[4])
                             for(;;){
                                 std::size_t str_size = session_p->pterminal.master.async_read_some(boost::asio::buffer(out_buf, limit), yc[ec]);
                                 if(ec){
-                                    logger{} << "master terminal async_read: " << ec.message();
+//                                    logger{} << "master terminal async_read: " << ec.message();
                                     session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                     //session_p->c.terminate();
                                     //session_p->pterminal.master.close();
@@ -182,7 +182,7 @@ int main(int argc, char* argv[4])
 //                                out_buf.clear();
 //                                out_buf.resize(limit*2);
                                 if(ec){
-                                    logger{} << "socket async_send: " << ec.message();
+//                                    logger{} << "socket async_send: " << ec.message();
                                     session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                     //session_p->c.terminate();
                                     //session_p->pterminal.master.close();
@@ -260,7 +260,7 @@ int main(int argc, char* argv[4])
                         for(;;){
                             str_size = session_p->socket.async_read_some(boost::asio::buffer(in_buf, limit), yc[ec]);
                             if(ec){
-                                logger{} << "socket async_read: " << ec.message();
+//                                logger{} << "socket async_read: " << ec.message();
                                 session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                 //session_p->c.terminate();
                                 //session_p->pterminal.master.close();
@@ -270,15 +270,15 @@ int main(int argc, char* argv[4])
                             filter_r(in_buf, str_size);
                             boost::asio::async_write(session_p->pterminal.master, boost::asio::buffer(in_buf, str_size), yc[ec]);
                             if(ec){
-                                logger{} << "master terminal async_write: " << ec.message();
+//                                logger{} << "master terminal async_write: " << ec.message();
                                 session_p->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
                                 //session_p->c.terminate();
                                 //session_p->pterminal.master.close();
                                 break;
                             }
                         }
-                        if(ec)
-                            logger{} << ec.message();
+//                        if(ec)
+//                            logger{} << ec.message();
                     });
                 }
             }
