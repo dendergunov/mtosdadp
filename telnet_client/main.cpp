@@ -296,11 +296,11 @@ std::string get_send_message(int policy, std::size_t send_bytes_threshold, std::
     case 1:
         return format("for ((i=1;i<=", read_byte_threshold/message.size()+1, ";i+=1)); do echo \"", message ,"$i\"; done\n");
     case 2:
-        if(send_bytes_threshold < 3000){
+        if(send_bytes_threshold < 1048576){
             for(std::size_t i = 0; i <= send_bytes_threshold/size; ++i)
                 message.append("light message");
         } else {
-            for(std::size_t i = 0; i <= 3000/size; ++i)
+            for(std::size_t i = 0; i <= 1048576/size; ++i)
                 message.append("light message");
         }
         return format("echo \"", message, "\"\n");
