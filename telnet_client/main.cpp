@@ -64,7 +64,7 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
         static int total_connected = 0;
 //        logger{} << "Sucessfully connected to telnet server! " << ++total_connected;
     } else if(events & BEV_EVENT_ERROR){
-        logger{} << "Error connecting to server!";
+        throw std::runtime_error("Error connecting to server!");
     }
 }
 
@@ -276,7 +276,8 @@ int main(int argc, char **argv)
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end-start;
 
-        logger{} << diff.count();
+        logger{} << "Processed in " <<diff.count()
+                 << "s, one client in: " << diff.count()/(*connections);
 
     }  catch (std::exception& e) {
         std::cerr << e.what();
